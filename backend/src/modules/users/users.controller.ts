@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
-import { emailService } from '../utils/email.service';
+import { emailService } from '../../utils/email.service';
 
 const prisma = new PrismaClient();
 
