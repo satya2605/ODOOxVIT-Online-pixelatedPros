@@ -1,0 +1,30 @@
+{
+  "name": "expense-management-backend",
+  "version": "1.0.0",
+  "description": "Enterprise-grade Expense Reimbursement Management System API",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "nodemon src/index.ts",
+    "build": "tsc",
+    "prisma:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.x",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.15",
+    "@types/express": "^4.17.20",
+    "@types/jsonwebtoken": "^9.0.4",
+    "@types/node": "^20.8.9",
+    "nodemon": "^3.0.1",
+    "prisma": "^5.x",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}

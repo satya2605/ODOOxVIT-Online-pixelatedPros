@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  ADMIN
+  CFO
+}
+
+enum ExpenseStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SKIPPED
+}
+
+enum RuleType {
+  PERCENTAGE
+  ROLE_BASED
+  HYBRID
+}
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  currency  String   @default("USD")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+  rules     Rule[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      Role     @default(EMPLOYEE)
+  companyId String
+  managerId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company  @relation(fields: [companyId], references: [id])
+  manager   User?    @relation("ManagerToEmployee", fields: [managerId], references: [id])
+  employees User[]   @relation("ManagerToEmployee")
+
+  expenses  Expense[]
+  approvals ApprovalStep[]
+  events    Event[]
+}
+
+model Expense {
+  id          String        @id @default(uuid())
+  userId      String
+  amount      Float
+  currency    String
+  category    String
+  status      ExpenseStatus @default(DRAFT)
+  date        DateTime
+  description String?
+  receiptUrl  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id])
+  approvalSteps ApprovalStep[]
+  events        Event[]
+}
+
+model ApprovalStep {
+  id         String         @id @default(uuid())
+  expenseId  String
+  approverId String
+  stepOrder  Int
+  status     ApprovalStatus @default(PENDING)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  expense  Expense @relation(fields: [expenseId], references: [id])
+  approver User    @relation(fields: [approverId], references: [id])
+}
+
+model Rule {
+  id           String   @id @default(uuid())
+  companyId    String
+  type         RuleType
+  conditionJson Json
+  priority     Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+}
+
+model Event {
+  id        String   @id @default(uuid())
+  expenseId String
+  actorId   String?
+  type      String
+  metadata  Json?
+  timestamp DateTime @default(now())
+
+  expense Expense @relation(fields: [expenseId], references: [id])
+  actor   User?   @relation(fields: [actorId], references: [id])
+}
