@@ -15,7 +15,7 @@ export interface User {
 export interface Approval {
   approverId: string;
   step: number;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'draft' | 'submitted' | 'pending' | 'in_review' | 'approved' | 'auto_approved' | 'rejected' | 'escalated';
   comment?: string;
   timestamp: Date;
   approverName?: string;
@@ -31,7 +31,7 @@ export interface Expense {
   date: Date;
   description: string;
   receiptUrl?: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'draft' | 'submitted' | 'pending' | 'in_review' | 'approved' | 'auto_approved' | 'rejected' | 'escalated';
   approvals: Approval[];
   createdAt: Date;
 }

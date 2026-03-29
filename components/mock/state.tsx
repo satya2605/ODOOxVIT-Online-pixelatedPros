@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useReducer, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useReducer, ReactNode, useCallback, useEffect } from 'react';
 import { Expense, User, ApprovalRule, UserRole, Approval, WorkflowStep } from './data';
 import { mockExpenses, mockApprovalRules, mockWorkflowSteps, mockUsers } from './data';
 
@@ -88,22 +88,38 @@ function appReducer(state: AppState, action: AppAction): AppState {
             }
             return app;
           });
+          // Basic Frontend Rule Engine Simulation
+          let newStatus = 'pending' as any;
+          const currentStepIndex = approvals.findIndex(a => a.status === 'pending');
+          
+          if (currentStepIndex === -1) {
+            // All current steps approved
+            const activeRulesTriggered = state.approvalRules.filter(rule => 
+              rule.enabled && rule.conditions.some(c => c.type === 'amount' && (c.operator === '>' && exp.amount > c.value))
+            );
 
-          // Check if there are more approval steps needed
-          const hasMoreSteps = state.workflowSteps.some(step => step.stepNumber > 1);
-          let newStatus: 'pending' | 'approved' | 'rejected' = 'pending';
-
-          if (hasMoreSteps && approvals[0]?.step === 1) {
-            // Add next step
-            approvals.push({
-              approverId: 'user-admin-1',
-              approverName: 'Finance',
-              step: 2,
-              status: 'pending',
-              timestamp: new Date(),
-            });
-          } else if (!hasMoreSteps) {
-            newStatus = 'approved';
+            if (activeRulesTriggered.length > 0 && approvals.length === 1) {
+              // Rule triggered, need another step
+              approvals.push({
+                approverId: 'user-admin-1',
+                approverName: 'Finance / Director',
+                step: 2,
+                status: 'pending',
+                timestamp: new Date(),
+              });
+              newStatus = 'in_review';
+            } else {
+              // Fully approved by final or auto-approved
+              approvals.push({
+                approverId: 'system',
+                approverName: 'Automation Engine',
+                step: approvals.length + 1,
+                status: 'auto_approved' as any,
+                comment: 'Automated final sign-off',
+                timestamp: new Date(),
+              });
+              newStatus = 'approved';
+            }
           }
 
           return {
@@ -237,6 +253,17 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
+
+  // Restore simulated auth from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedRole = localStorage.getItem('currentRole') as any;
+      const storedUserId = localStorage.getItem('currentUserId');
+      if (storedRole && storedUserId) {
+        dispatch({ type: 'SET_CURRENT_USER', payload: { role: storedRole, userId: storedUserId } });
+      }
+    }
+  }, []);
 
   const submitExpense = useCallback(async (expense: Expense) => {
     dispatch({ type: 'SET_LOADING', payload: true });

@@ -18,8 +18,8 @@ export function AppNavbar() {
   const router = useRouter();
   const pathname = usePathname();
   const { state, dispatch } = useApp();
-
-  const currentUser = mockUsers.find(u => u.id === state.currentUserId);
+  
+  const currentUser = state.users.find(u => u.id === state.currentUserId);
 
   const handleRoleChange = (role: string, userId: string) => {
     dispatch({ type: 'SET_CURRENT_USER', payload: { userId, role: role as any } });

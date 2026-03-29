@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useApp } from '@/components/mock/state';
 import { mockUsers } from '@/components/mock/data';
 import { DollarSign, Clock, CheckCircle } from 'lucide-react';
+import { SmartStatusBadge } from '@/components/features/expenses/smart-status-badge';
 
 export default function EmployeeDashboard() {
   const { state } = useApp();
@@ -125,17 +126,7 @@ export default function EmployeeDashboard() {
                       <td className="py-3 px-4 text-sm">{expense.category}</td>
                       <td className="py-3 px-4 text-sm font-medium">${expense.amount.toFixed(2)}</td>
                       <td className="py-3 px-4 text-sm">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            expense.status === 'approved'
-                              ? 'bg-green-100 text-green-800'
-                              : expense.status === 'pending'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}
-                        >
-                          {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
-                        </span>
+                        <SmartStatusBadge status={expense.status} />
                       </td>
                     </tr>
                   ))}
@@ -143,10 +134,14 @@ export default function EmployeeDashboard() {
               </table>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground mb-4">No expenses yet</p>
+            <div className="text-center py-12 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg bg-muted/20">
+              <DollarSign className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
+              <p className="text-muted-foreground mb-4 font-medium">No expenses yet</p>
+              <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                Submit an expense report to get things started. Your reimbursements will appear here.
+              </p>
               <Link href="/dashboard/employee/submit">
-                <Button variant="outline">Submit Your First Expense</Button>
+                <Button>Submit Your First Expense</Button>
               </Link>
             </div>
           )}

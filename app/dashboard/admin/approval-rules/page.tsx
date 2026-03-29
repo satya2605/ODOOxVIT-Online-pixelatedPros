@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { RuleBuilder } from '@/components/features/admin/rule-builder';
 
 export default function ApprovalRulesPage() {
   const { state, dispatch } = useApp();
@@ -89,17 +90,15 @@ export default function ApprovalRulesPage() {
           <DialogTrigger asChild>
             <Button>Create Rule</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Create Approval Rule</DialogTitle>
-              <DialogDescription>Define a new automatic approval rule</DialogDescription>
+              <DialogDescription>Define a new automatic approval logic using the visual editor</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Rule creation would show a builder UI with conditions and actions
-              </p>
+            <div className="py-2">
+              <RuleBuilder />
             </div>
-            <DialogFooter>
+            <DialogFooter className="pt-4 mt-4 border-t border-border">
               <Button variant="outline" onClick={() => setIsOpen(false)}>
                 Cancel
               </Button>

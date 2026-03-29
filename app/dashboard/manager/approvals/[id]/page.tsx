@@ -7,8 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useApp } from '@/components/mock/state';
-import { ChevronLeft, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { ChevronLeft, Info, GitMerge } from 'lucide-react';
 import { toast } from 'sonner';
+
+import { SmartStatusBadge } from '@/components/features/expenses/smart-status-badge';
+import { WorkflowTimeline } from '@/components/features/expenses/workflow-timeline';
+import { RuleEvaluatorCard } from '@/components/features/expenses/rule-evaluator-card';
+import { ActivityFeed } from '@/components/features/expenses/activity-feed';
 
 export default function ApprovalDetailPage() {
   const { id } = useParams();
@@ -16,6 +21,21 @@ export default function ApprovalDetailPage() {
   const { state, approveExpense, rejectExpense } = useApp();
   const [comment, setComment] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Added escalate and request info simulation actions
+  const escalateExpense = async () => {
+    toast.success('Expense escalated to Director!');
+    console.log('[Dev Note] API Needed: POST /expenses/' + id + '/escalate');
+  };
+
+  const requestChanges = async () => {
+    if (!comment.trim()) {
+      toast.error('Please provide what needs to be changed');
+      return;
+    }
+    toast.success('Change request sent to ' + expense?.employeeName);
+    console.log('[Dev Note] API Needed: POST /expenses/' + id + '/request-changes');
+  };
 
   const expense = state.expenses.find(e => e.id === id);
 
@@ -38,6 +58,7 @@ export default function ApprovalDetailPage() {
   const handleApprove = async () => {
     setIsProcessing(true);
     try {
+      console.log('[Dev Note] API Needed: POST /approvals/' + expense.id + '/approve');
       await approveExpense(expense.id, state.currentUserId, comment);
       toast.success('Expense approved!');
       setTimeout(() => router.push('/dashboard/manager/approvals'), 1000);
@@ -53,6 +74,7 @@ export default function ApprovalDetailPage() {
     }
     setIsProcessing(true);
     try {
+      console.log('[Dev Note] API Needed: POST /approvals/' + expense.id + '/reject');
       await rejectExpense(expense.id, state.currentUserId, comment);
       toast.success('Expense rejected!');
       setTimeout(() => router.push('/dashboard/manager/approvals'), 1000);
@@ -61,175 +83,174 @@ export default function ApprovalDetailPage() {
     }
   };
 
+  type ActivityEventType = "submit" | "approve" | "reject" | "rule_trigger" | "system";
+  
+  // Generate mock events for the activity feed based on approvals
+  const mockEvents = [
+    {
+      id: "ev1",
+      type: "submit" as ActivityEventType,
+      message: "Expense submitted for review",
+      timestamp: expense.createdAt,
+      user: expense.employeeName,
+    },
+    ...expense.approvals.filter(a => a.status !== 'pending').map(a => ({
+      id: "ev_app_" + a.step,
+      type: (a.status === 'approved' ? 'approve' : 'reject') as ActivityEventType,
+      message: a.comment ? `Comment: "${a.comment}"` : `Expense ${a.status}`,
+      timestamp: a.timestamp || new Date(),
+      user: a.approverName,
+    }))
+  ];
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <Link href="/dashboard/manager/approvals">
-        <Button variant="ghost" className="gap-2">
+    <div className="max-w-5xl mx-auto space-y-6 flex flex-col pt-4">
+      <Link href="/dashboard/manager/approvals" className="w-fit">
+        <Button variant="ghost" className="gap-2 -ml-2 text-muted-foreground hover:text-foreground">
           <ChevronLeft className="w-4 h-4" />
           Back to Approvals
         </Button>
       </Link>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content */}
-        <div className="md:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6">
           {/* Expense Details */}
-          <Card>
-            <CardHeader>
+          <Card className="border shadow-sm">
+            <CardHeader className="pb-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <CardTitle className="text-2xl">{expense.category}</CardTitle>
-                  <CardDescription>{expense.employeeName}</CardDescription>
+                  <CardTitle className="text-2xl font-bold tracking-tight mb-1">{expense.category}</CardTitle>
+                  <CardDescription className="text-base">{expense.employeeName}</CardDescription>
                 </div>
-                <span
-                  className={`px-4 py-2 rounded-full text-sm font-medium ${
-                    expense.status === 'approved'
-                      ? 'bg-green-100 text-green-800'
-                      : expense.status === 'pending'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
-                </span>
+                {/* Replaced with SmartStatusBadge */}
+                <SmartStatusBadge status={expense.status} className="text-sm py-1 px-3 shadow-sm border-0" />
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-2 gap-6 p-4 bg-muted/30 rounded-lg border border-border/50">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Amount</p>
-                  <p className="text-3xl font-bold">
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Amount</p>
+                  <p className="text-3xl font-bold tracking-tight">
                     ${expense.amount.toFixed(2)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Date</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">Date of Expense</p>
                   <p className="text-lg font-medium">{expense.date.toLocaleDateString()}</p>
                 </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Description</p>
-                <p className="text-foreground">{expense.description || 'No description'}</p>
+              <div className="px-1">
+                <p className="text-sm font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  <Info className="w-4 h-4" /> Description
+                </p>
+                <p className="text-foreground leading-relaxed">{expense.description || 'No description provided'}</p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Receipt */}
+          {/* Rule Evaluator Panel */}
+          <RuleEvaluatorCard 
+            expense={expense} 
+            activeRules={state.approvalRules.filter(r => r.conditions.some(c => c.type === 'amount' && (c.operator === '>' && expense.amount > c.value)))} 
+            isPendingPreview={expense.status === 'pending'} 
+          />
+
+          {/* Receipt - usually hidden inside an accordion or dialog but left here for UI */}
           {expense.receiptUrl && (
             <Card>
               <CardHeader>
-                <CardTitle>Receipt</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2">Receipt Document</CardTitle>
               </CardHeader>
               <CardContent>
-                <img src={expense.receiptUrl} alt="Receipt" className="w-full rounded-lg" />
+                <img src={expense.receiptUrl} alt="Receipt" className="w-full max-h-64 object-cover rounded-lg border" />
               </CardContent>
             </Card>
           )}
 
-          {/* Approval Timeline */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Approval Workflow</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {expense.approvals.map((approval, idx) => (
-                  <div key={idx} className="flex gap-4">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
-                          approval.status === 'approved'
-                            ? 'bg-green-500'
-                            : approval.status === 'rejected'
-                            ? 'bg-red-500'
-                            : 'bg-gray-300'
-                        }`}
-                      >
-                        {approval.status === 'approved' ? (
-                          <CheckCircle className="w-4 h-4" />
-                        ) : approval.status === 'rejected' ? (
-                          <XCircle className="w-4 h-4" />
-                        ) : (
-                          <Clock className="w-4 h-4" />
-                        )}
-                      </div>
-                      {idx < expense.approvals.length - 1 && (
-                        <div className="w-0.5 h-12 bg-border my-1" />
-                      )}
-                    </div>
-                    <div className="flex-1 pt-1">
-                      <p className="font-medium">
-                        {approval.approverName} (Step {approval.step})
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {approval.status === 'approved'
-                          ? 'Approved'
-                          : approval.status === 'rejected'
-                          ? 'Rejected'
-                          : 'Pending'}
-                      </p>
-                      {approval.comment && (
-                        <p className="text-sm mt-2 p-2 bg-muted rounded">
-                          {approval.comment}
-                        </p>
-                      )}
-                      {approval.timestamp && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {approval.timestamp.toLocaleString()}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Enhanced visual timeline */}
+          <WorkflowTimeline approvals={expense.approvals} />
         </div>
 
         {/* Approval Actions Sidebar */}
-        <div>
-          <Card className="sticky top-24">
-            <CardHeader>
-              <CardTitle>Your Decision</CardTitle>
-              <CardDescription>Review and take action</CardDescription>
+        <div className="space-y-6">
+          <Card className="sticky top-6 shadow-md border-primary/20">
+            <CardHeader className="bg-primary/5 border-b border-primary/10 pb-4">
+              <CardTitle className="text-lg">Action Box</CardTitle>
+              <CardDescription>Review and take appropriate action</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5 pt-5">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Comment (optional)</label>
+                <label className="text-sm font-semibold">Decisions Details</label>
                 <Textarea
-                  placeholder="Add a comment..."
+                  placeholder="Required for rejection or changes..."
                   value={comment}
                   onChange={e => setComment(e.target.value)}
-                  rows={4}
+                  rows={3}
+                  className="resize-none"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Button
-                  onClick={handleApprove}
-                  disabled={isProcessing}
-                  className="w-full bg-green-600 hover:bg-green-700"
-                >
-                  Approve
-                </Button>
-                <Button
-                  onClick={handleReject}
-                  disabled={isProcessing}
-                  variant="destructive"
-                  className="w-full"
-                >
-                  Reject
-                </Button>
-              </div>
+              {expense.status === 'pending' ? (
+                 <div className="space-y-3">
+                   <div className="flex gap-2">
+                     <Button
+                       onClick={handleApprove}
+                       disabled={isProcessing}
+                       className="w-full bg-emerald-600 hover:bg-emerald-700"
+                     >
+                       Approve
+                     </Button>
+                     <Button
+                       onClick={handleReject}
+                       disabled={isProcessing}
+                       variant="destructive"
+                       className="w-full bg-red-600 hover:bg-red-700"
+                     >
+                       Reject
+                     </Button>
+                   </div>
+                   
+                   <div className="flex gap-2">
+                     <Button 
+                       variant="outline" 
+                       className="w-full text-xs h-9" 
+                       onClick={requestChanges}
+                     >
+                       Request Change
+                     </Button>
+                     <Button 
+                       variant="secondary" 
+                       className="w-full text-xs h-9 flex items-center gap-1 text-orange-600 hover:text-orange-700" 
+                       onClick={escalateExpense}
+                     >
+                       <GitMerge className="w-3 h-3" /> Escalate
+                     </Button>
+                   </div>
+                 </div>
+              ) : (
+                <div className="p-3 bg-muted rounded-md text-sm text-center border">
+                  This expense has been {expense.status}
+                </div>
+              )}
 
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-xs text-muted-foreground">
-                  <strong>Next:</strong> This expense will move to the next approval step
-                  after you approve.
+              {/* Backend UI Annotation */}
+              <div className="p-3 mt-4 bg-slate-900 rounded-md border border-slate-700 shadow-inner">
+                <p className="text-xs font-mono text-green-400 mb-1 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                  Dev API Monitor
+                </p>
+                <p className="text-[10px] font-mono text-slate-300">
+                  Ready Hooks:<br/>
+                  POST /api/v1/approvals/:id<br/>
+                  PUT /api/v1/expenses/:id/escalate
                 </p>
               </div>
             </CardContent>
           </Card>
+
+          {/* Real-time Activity Feed */}
+          <ActivityFeed events={mockEvents} />
         </div>
       </div>
     </div>
