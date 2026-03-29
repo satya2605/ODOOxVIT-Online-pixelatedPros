@@ -47,7 +47,7 @@ export class ApprovalService {
     );
 
     // STATE MACHINE logic
-    if (action === 'REJECTED') {
+    if (action === 'REJECT') {
       await prisma.expense.update({ where: { id: expenseId }, data: { status: ExpenseStatus.REJECTED } });
       await eventService.logEvent(expenseId, 'EXPENSE_REJECTED', approverId, { reason: 'Step rejected halting flow' });
       return { status: 'REJECTED' };

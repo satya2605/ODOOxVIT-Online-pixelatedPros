@@ -1,14 +1,18 @@
 import { Router } from 'express';
+import expensesRoutes from '../modules/expenses/expenses.routes';
+import approvalsRoutes from '../modules/approvals/approvals.routes';
+import rulesRoutes from '../modules/rules/rules.routes';
+import usersRoutes from '../modules/users/users.routes';
+import ocrRoutes from '../modules/ocr/ocr.routes';
 
 const router = Router();
 
-// Modular Route implementations (Stubbed for scaling)
-router.use('/auth', (req, res) => res.json({ message: 'Auth routes placeholder' }));
-router.use('/users', (req, res) => res.json({ message: 'Users routes placeholder' }));
-router.use('/expenses', (req, res) => res.json({ message: 'Expenses routes placeholder' }));
-router.use('/approvals', (req, res) => res.json({ message: 'Approvals routes placeholder' }));
-router.use('/rules', (req, res) => res.json({ message: 'Rules routes placeholder' }));
-router.use('/analytics', (req, res) => res.json({ message: 'Analytics routes placeholder' }));
+// Modular Route implementations mapping to frontend
+router.use('/expenses', expensesRoutes);
+router.use('/approvals', approvalsRoutes);
+router.use('/rules', rulesRoutes);
+router.use('/users', usersRoutes);
+router.use('/ocr', ocrRoutes);
 
 // System Check
 router.get('/health', (req, res) => res.json({ status: 'OK' }));

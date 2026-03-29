@@ -65,23 +65,43 @@ export function ExpenseForm() {
 
   const simulateOCR = async () => {
     setIsScanning(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      // Call real backend OCR service
+      const response = await fetch('http://localhost:5000/api/ocr/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receiptBase64: receipt }),
+      });
 
-    // Simulate OCR extraction
-    const simulatedData = {
-      amount: Math.round(Math.random() * 800 + 100) + 0.99,
-      description: 'Receipt scan - Business expense item',
-    };
+      if (!response.ok) throw new Error('OCR service failed');
 
-    setReceiptData(simulatedData);
-    setFormData(prev => ({
-      ...prev,
-      amount: simulatedData.amount.toString(),
-      description: simulatedData.description,
-    }));
+      const data = await response.json();
 
-    setIsScanning(false);
-    toast.success('Receipt scanned! Data populated.');
+      setReceiptData({ amount: data.amount, description: data.description });
+      setFormData(prev => ({
+        ...prev,
+        amount: data.amount?.toString() || prev.amount,
+        description: data.description || prev.description,
+        date: data.date || prev.date,
+      }));
+
+      toast.success('Receipt scanned! Data populated from server.');
+    } catch (error) {
+      // Fallback to local mock if backend is unreachable
+      const fallbackData = {
+        amount: Math.round(Math.random() * 800 + 100) + 0.99,
+        description: 'Receipt scan - Business expense item',
+      };
+      setReceiptData(fallbackData);
+      setFormData(prev => ({
+        ...prev,
+        amount: fallbackData.amount.toString(),
+        description: fallbackData.description,
+      }));
+      toast.warning('Backend OCR unavailable — using local mock.');
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
