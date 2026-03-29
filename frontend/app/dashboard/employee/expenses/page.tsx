@@ -1,138 +1,155 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useApp } from '@/components/mock/state';
-import { ChevronRight } from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { api, Expense } from '@/lib/api';
+import { ChevronRight, FileText, RefreshCw, PlusCircle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+const STATUS_COLORS: Record<string, string> = {
+  DRAFT: 'bg-slate-100 text-slate-600 border-slate-200',
+  SUBMITTED: 'bg-amber-100 text-amber-700 border-amber-200',
+  IN_REVIEW: 'bg-blue-100 text-blue-700 border-blue-200',
+  APPROVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  REJECTED: 'bg-red-100 text-red-600 border-red-200',
+};
 
 export default function EmployeeExpensesPage() {
-  const { state } = useApp();
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('all');
 
-  const employeeExpenses = state.expenses
-    .filter(e => e.employeeId === state.currentUserId)
-    .filter(e => statusFilter === 'all' || e.status === statusFilter)
-    .sort((a, b) => b.date.getTime() - a.date.getTime());
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('currentUserId') ?? '' : '';
+
+  const fetchExpenses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api.getExpenses(userId);
+      setExpenses(data);
+    } catch {
+      setExpenses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
+
+  const filtered = expenses.filter(
+    (e) => statusFilter === 'all' || e.status === statusFilter
+  );
 
   const stats = {
-    total: state.expenses.filter(e => e.employeeId === state.currentUserId).length,
-    pending: state.expenses.filter(e => e.employeeId === state.currentUserId && e.status === 'pending').length,
-    approved: state.expenses.filter(e => e.employeeId === state.currentUserId && e.status === 'approved').length,
-    rejected: state.expenses.filter(e => e.employeeId === state.currentUserId && e.status === 'rejected').length,
+    total: expenses.length,
+    draft: expenses.filter((e) => e.status === 'DRAFT').length,
+    pending: expenses.filter((e) => e.status === 'SUBMITTED' || e.status === 'IN_REVIEW').length,
+    approved: expenses.filter((e) => e.status === 'APPROVED').length,
+    rejected: expenses.filter((e) => e.status === 'REJECTED').length,
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2">My Expenses</h1>
-          <p className="text-muted-foreground">View and manage all your submitted expenses</p>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <FileText className="w-6 h-6 text-primary" /> My Expenses
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">Track and manage your expense submissions</p>
         </div>
-        <Link href="/dashboard/employee/submit">
-          <Button>Submit New Expense</Button>
-        </Link>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={fetchExpenses}>
+            <RefreshCw className="w-4 h-4 mr-1.5" /> Refresh
+          </Button>
+          <Link href="/dashboard/employee/submit">
+            <Button size="sm" className="gap-1.5">
+              <PlusCircle className="w-4 h-4" /> Submit Expense
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid gap-3 md:grid-cols-4">
-        <Card className={statusFilter === 'all' ? 'border-primary border-2' : 'cursor-pointer hover:border-primary/50'} onClick={() => setStatusFilter('all')}>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <p className="text-sm text-muted-foreground">Total Expenses</p>
-          </CardContent>
-        </Card>
-        <Card className={statusFilter === 'pending' ? 'border-primary border-2' : 'cursor-pointer hover:border-primary/50'} onClick={() => setStatusFilter('pending')}>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.pending}</div>
-            <p className="text-sm text-muted-foreground">Pending</p>
-          </CardContent>
-        </Card>
-        <Card className={statusFilter === 'approved' ? 'border-primary border-2' : 'cursor-pointer hover:border-primary/50'} onClick={() => setStatusFilter('approved')}>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.approved}</div>
-            <p className="text-sm text-muted-foreground">Approved</p>
-          </CardContent>
-        </Card>
-        <Card className={statusFilter === 'rejected' ? 'border-primary border-2' : 'cursor-pointer hover:border-primary/50'} onClick={() => setStatusFilter('rejected')}>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{stats.rejected}</div>
-            <p className="text-sm text-muted-foreground">Rejected</p>
-          </CardContent>
-        </Card>
+      {/* Stats - clickable filters */}
+      <div className="grid gap-3 md:grid-cols-5">
+        {[
+          { key: 'all', label: 'Total', value: stats.total },
+          { key: 'DRAFT', label: 'Draft', value: stats.draft },
+          { key: 'SUBMITTED', label: 'Pending', value: stats.pending },
+          { key: 'APPROVED', label: 'Approved', value: stats.approved },
+          { key: 'REJECTED', label: 'Rejected', value: stats.rejected },
+        ].map((s) => (
+          <Card
+            key={s.key}
+            className={`cursor-pointer transition-all hover:shadow-md ${statusFilter === s.key ? 'ring-2 ring-primary border-primary' : 'hover:border-primary/40'}`}
+            onClick={() => setStatusFilter(s.key)}
+          >
+            <CardContent className="pt-4 pb-4">
+              <div className="text-2xl font-bold">{s.value}</div>
+              <p className="text-xs text-muted-foreground">{s.label}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Expenses List */}
+      {/* List */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Expense List</CardTitle>
-              <CardDescription>All your submitted expense reports</CardDescription>
+              <CardTitle className="text-base">Expense History</CardTitle>
+              <CardDescription>{filtered.length} expenses shown</CardDescription>
             </div>
-            <Select value={statusFilter} onValueChange={v => setStatusFilter(v as any)}>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="DRAFT">Draft</SelectItem>
+                <SelectItem value="SUBMITTED">Submitted</SelectItem>
+                <SelectItem value="IN_REVIEW">In Review</SelectItem>
+                <SelectItem value="APPROVED">Approved</SelectItem>
+                <SelectItem value="REJECTED">Rejected</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </CardHeader>
-        <CardContent>
-          {employeeExpenses.length > 0 ? (
-            <div className="space-y-2">
-              {employeeExpenses.map(expense => (
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex justify-center items-center py-12 gap-2 text-muted-foreground">
+              <RefreshCw className="w-4 h-4 animate-spin" /> Loading expenses...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12">
+              <FileText className="w-10 h-10 mx-auto mb-3 opacity-20" />
+              <p className="font-medium">No expenses found</p>
+              <p className="text-sm text-muted-foreground mt-1">Submit an expense to get started</p>
+              <Link href="/dashboard/employee/submit" className="inline-block mt-4">
+                <Button variant="outline" size="sm">Submit Your First Expense</Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {filtered.map((expense) => (
                 <Link key={expense.id} href={`/dashboard/employee/expenses/${expense.id}`}>
-                  <div className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer group">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-4">
-                        <div>
-                          <p className="font-medium">{expense.category}</p>
-                          <p className="text-sm text-muted-foreground">{expense.description}</p>
-                        </div>
-                      </div>
+                  <div className="flex items-center gap-4 px-5 py-4 hover:bg-muted/30 transition-colors group">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{expense.category}</p>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{expense.description}</p>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="font-bold">${expense.amount.toFixed(2)}</p>
-                        <p className="text-sm text-muted-foreground">{expense.date.toLocaleDateString()}</p>
-                      </div>
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                          expense.status === 'approved'
-                            ? 'bg-green-100 text-green-800'
-                            : expense.status === 'pending'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-sm">{expense.amount.toLocaleString()} {expense.currency}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(expense.date).toLocaleDateString()}</p>
                     </div>
+                    <Badge className={`border text-xs shrink-0 ${STATUS_COLORS[expense.status] ?? STATUS_COLORS.DRAFT}`}>
+                      {expense.status.charAt(0) + expense.status.slice(1).toLowerCase().replace('_', ' ')}
+                    </Badge>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
                   </div>
                 </Link>
               ))}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground mb-4">No expenses found</p>
-              <Link href="/dashboard/employee/submit">
-                <Button variant="outline">Submit Your First Expense</Button>
-              </Link>
             </div>
           )}
         </CardContent>

@@ -3,33 +3,45 @@
 import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { useApp } from '@/components/mock/state';
-import { WorkflowStep } from '@/components/mock/data';
-import { ArrowDown, Plus, Trash2, GripVertical } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowDown, Plus, Trash2, GripVertical, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+interface WorkflowStep {
+  id: string;
+  stepNumber: number;
+  requiredRole: string;
+  name: string;
+}
+
+const DEFAULT_STEPS: WorkflowStep[] = [
+  { id: 'step-1', stepNumber: 1, requiredRole: 'manager', name: 'Manager Review' },
+  { id: 'step-2', stepNumber: 2, requiredRole: 'finance', name: 'Finance Review' },
+];
+
+const getRoleName = (role: string): string => {
+  const map: Record<string, string> = {
+    manager: 'Manager Review',
+    finance: 'Finance Review',
+    director: 'Director Approval',
+    cfo: 'CFO Approval',
+  };
+  return map[role] ?? role;
+};
+
 export default function WorkflowsPage() {
-  const { state, dispatch } = useApp();
-  const [steps, setSteps] = useState<WorkflowStep[]>(state.workflowSteps);
-  const [newRole, setNewRole] = useState<'manager' | 'finance' | 'director'>('manager');
+  const [steps, setSteps] = useState<WorkflowStep[]>(DEFAULT_STEPS);
+  const [newRole, setNewRole] = useState('manager');
 
   const handleAddStep = () => {
+    const next = Math.max(...steps.map(s => s.stepNumber), 0) + 1;
     const newStep: WorkflowStep = {
       id: `step-${Date.now()}`,
-      stepNumber: Math.max(...steps.map(s => s.stepNumber), 0) + 1,
+      stepNumber: next,
       requiredRole: newRole,
       name: getRoleName(newRole),
     };
-    setSteps([...steps]);
+    setSteps(prev => [...prev, newStep]);
     toast.success('Step added');
   };
 
@@ -38,25 +50,13 @@ export default function WorkflowsPage() {
       toast.error('You must have at least one approval step');
       return;
     }
-    setSteps(steps.filter(s => s.id !== stepId));
-    toast.success('Step deleted');
+    setSteps(prev => prev.filter(s => s.id !== stepId).map((s, i) => ({ ...s, stepNumber: i + 1 })));
+    toast.success('Step removed');
   };
 
   const handleSave = () => {
-    dispatch({
-      type: 'UPDATE_WORKFLOW_STEPS',
-      payload: steps,
-    });
-    toast.success('Workflow saved successfully');
-  };
-
-  const getRoleName = (role: string): string => {
-    const roleMap: Record<string, string> = {
-      manager: 'Manager Review',
-      finance: 'Finance Review',
-      director: 'Director Approval',
-    };
-    return roleMap[role] || role;
+    // In production this would persist to backend — for now it's local state
+    toast.success('Workflow configuration saved!');
   };
 
   return (

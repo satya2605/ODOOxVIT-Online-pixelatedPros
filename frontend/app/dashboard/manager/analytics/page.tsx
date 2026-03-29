@@ -1,20 +1,31 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useApp } from '@/components/mock/state';
-import { mockUsers } from '@/components/mock/data';
+import { api, Expense } from '@/lib/api';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 export default function ManagerAnalyticsPage() {
-  const { state } = useApp();
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Get managed employees
-  const managedEmployees = mockUsers.filter(u => u.managerId === state.currentUserId);
-  const managedExpenses = state.expenses.filter(e =>
-    managedEmployees.some(emp => emp.id === e.employeeId)
-  );
+  const fetchExpenses = useCallback(async () => {
+    try {
+      const data = await api.getExpenses();
+      setExpenses(data);
+    } catch {
+      setExpenses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // Calculate category breakdown
+  useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
+
+  // Compute analytics from real expense data
+  const managedExpenses = expenses;
+
+  // Category breakdown
   const categoryData = managedExpenses.reduce((acc, exp) => {
     const existing = acc.find(c => c.name === exp.category);
     if (existing) {
@@ -26,122 +37,73 @@ export default function ManagerAnalyticsPage() {
     return acc;
   }, [] as Array<{ name: string; value: number; count: number }>);
 
-  // Calculate status breakdown
+  // Status breakdown
   const statusData = [
-    {
-      name: 'Approved',
-      value: managedExpenses.filter(e => e.status === 'approved').length,
-      fill: '#10B981',
-    },
-    {
-      name: 'Pending',
-      value: managedExpenses.filter(e => e.status === 'pending').length,
-      fill: '#FBBF24',
-    },
-    {
-      name: 'Rejected',
-      value: managedExpenses.filter(e => e.status === 'rejected').length,
-      fill: '#EF4444',
-    },
+    { name: 'Approved', value: managedExpenses.filter(e => e.status === 'APPROVED').length, fill: '#10B981' },
+    { name: 'Pending', value: managedExpenses.filter(e => e.status === 'SUBMITTED' || e.status === 'IN_REVIEW').length, fill: '#FBBF24' },
+    { name: 'Rejected', value: managedExpenses.filter(e => e.status === 'REJECTED').length, fill: '#EF4444' },
   ];
 
-  // Employee summary
-  const employeeSummary = managedEmployees.map(emp => {
-    const empExpenses = managedExpenses.filter(e => e.employeeId === emp.id);
-    return {
-      name: emp.name.split(' ')[0],
-      total: empExpenses.length,
-      approved: empExpenses.filter(e => e.status === 'approved').length,
-      pending: empExpenses.filter(e => e.status === 'pending').length,
-      amount: empExpenses.reduce((sum, e) => sum + e.amount, 0),
-    };
-  });
-
-  // Daily trend
+  // Daily trend (last 7 days)
   const dailyTrend = Array.from({ length: 7 }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() - (6 - i));
     const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const dayExpenses = managedExpenses.filter(e => 
-      e.date.toLocaleDateString() === date.toLocaleDateString()
+    const dayExpenses = managedExpenses.filter(e =>
+      new Date(e.date).toDateString() === date.toDateString()
     );
-    return {
-      date: dateStr,
-      amount: dayExpenses.reduce((sum, e) => sum + e.amount, 0),
-      count: dayExpenses.length,
-    };
+    return { date: dateStr, amount: dayExpenses.reduce((sum, e) => sum + e.amount, 0), count: dayExpenses.length };
   });
 
   const totalAmount = managedExpenses.reduce((sum, e) => sum + e.amount, 0);
-  const approvalRate = managedExpenses.length > 0 
-    ? Math.round((managedExpenses.filter(e => e.status === 'approved').length / managedExpenses.length) * 100)
+  const approvalRate = managedExpenses.length > 0
+    ? Math.round((managedExpenses.filter(e => e.status === 'APPROVED').length / managedExpenses.length) * 100)
     : 0;
 
+
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Team Analytics</h1>
-        <p className="text-muted-foreground">Spending and approval metrics for your team</p>
+        <h1 className="text-2xl font-bold tracking-tight mb-2">Team Analytics</h1>
+        <p className="text-muted-foreground text-sm">Spending and approval metrics across all expenses</p>
       </div>
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Spend
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Spend</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalAmount.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {managedExpenses.length} expenses
-            </p>
+            <div className="text-2xl font-bold">{totalAmount.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">{managedExpenses.length} expenses</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Approval Rate
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Approval Rate</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{approvalRate}%</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {managedExpenses.filter(e => e.status === 'approved').length} approved
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">{managedExpenses.filter(e => e.status === 'APPROVED').length} approved</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Pending Review
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Review</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              ${managedExpenses
-                .filter(e => e.status === 'pending')
-                .reduce((sum, e) => sum + e.amount, 0)
-                .toFixed(2)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {managedExpenses.filter(e => e.status === 'pending').length} expenses
-            </p>
+            <div className="text-2xl font-bold">{managedExpenses.filter(e => e.status === 'SUBMITTED' || e.status === 'IN_REVIEW').length}</div>
+            <p className="text-xs text-muted-foreground mt-1">awaiting action</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Team Size
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active Expenses</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{managedEmployees.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">direct reports</p>
+            <div className="text-2xl font-bold">{managedExpenses.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">all time</p>
           </CardContent>
         </Card>
       </div>
@@ -160,9 +122,9 @@ export default function ManagerAnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                 <XAxis dataKey="date" stroke="#9CA3AF" />
                 <YAxis stroke="#9CA3AF" />
-                <Tooltip 
+                <Tooltip
                   contentStyle={{ backgroundColor: '#FFF', border: '1px solid #E5E7EB' }}
-                  formatter={(value) => `$${value.toFixed(2)}`}
+                  formatter={(value) => `${Number(value).toLocaleString()}`}
                 />
                 <Legend />
                 <Line
@@ -222,7 +184,7 @@ export default function ManagerAnalyticsPage() {
               <YAxis stroke="#9CA3AF" />
               <Tooltip
                 contentStyle={{ backgroundColor: '#FFF', border: '1px solid #E5E7EB' }}
-                formatter={(value) => `$${value.toFixed(2)}`}
+                formatter={(value) => `${Number(value).toLocaleString()}`}
               />
               <Legend />
               <Bar dataKey="value" fill="#714B67" name="Amount" radius={[8, 8, 0, 0]} />
@@ -235,43 +197,29 @@ export default function ManagerAnalyticsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Team Member Summary</CardTitle>
-          <CardDescription>Individual spending and approval metrics</CardDescription>
+          <CardDescription>Spending by expense category</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Employee
-                  </th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Total Expenses
-                  </th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Approved
-                  </th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Pending
-                  </th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
-                    Amount
-                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Category</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Count</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Total Amount</th>
                 </tr>
               </thead>
               <tbody>
-                {employeeSummary.map(emp => (
-                  <tr key={emp.name} className="border-b border-border hover:bg-muted/50">
-                    <td className="py-3 px-4 text-sm font-medium">{emp.name}</td>
-                    <td className="py-3 px-4 text-sm text-right">{emp.total}</td>
-                    <td className="py-3 px-4 text-sm text-right text-green-600 font-medium">
-                      {emp.approved}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-right text-yellow-600 font-medium">
-                      {emp.pending}
-                    </td>
+                {categoryData.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="py-8 text-center text-sm text-muted-foreground">No expense data yet</td>
+                  </tr>
+                ) : categoryData.map((cat) => (
+                  <tr key={cat.name} className="border-b border-border hover:bg-muted/50">
+                    <td className="py-3 px-4 text-sm font-medium">{cat.name}</td>
+                    <td className="py-3 px-4 text-sm text-right">{cat.count}</td>
                     <td className="py-3 px-4 text-sm text-right font-bold">
-                      ${emp.amount.toFixed(2)}
+                      {cat.value.toLocaleString()}
                     </td>
                   </tr>
                 ))}

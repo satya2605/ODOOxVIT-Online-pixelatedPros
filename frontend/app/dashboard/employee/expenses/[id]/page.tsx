@@ -1,40 +1,75 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useApp } from '@/components/mock/state';
-import { ChevronLeft, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { api, Expense } from '@/lib/api';
+import { ChevronLeft, CheckCircle2, Clock, XCircle, RefreshCw, Receipt } from 'lucide-react';
+
+const STATUS_COLORS: Record<string, string> = {
+  DRAFT: 'bg-slate-100 text-slate-600 border-slate-200',
+  SUBMITTED: 'bg-amber-100 text-amber-700 border-amber-200',
+  IN_REVIEW: 'bg-blue-100 text-blue-700 border-blue-200',
+  APPROVED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  REJECTED: 'bg-red-100 text-red-600 border-red-200',
+};
 
 export default function ExpenseDetailPage() {
-  const { id } = useParams();
-  const { state } = useApp();
+  const params = useParams();
+  const id = params?.id as string;
 
-  const expense = state.expenses.find(e => e.id === id);
+  const [expense, setExpense] = useState<Expense | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
-  if (!expense) {
+  useEffect(() => {
+    const fetchExpense = async () => {
+      try {
+        const data = await api.getExpenseById(id);
+        setExpense(data);
+      } catch {
+        setNotFound(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (id) fetchExpense();
+  }, [id]);
+
+  if (loading) {
     return (
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="p-6 flex justify-center items-center gap-2 text-muted-foreground h-40">
+        <RefreshCw className="w-4 h-4 animate-spin" /> Loading expense...
+      </div>
+    );
+  }
+
+  if (notFound || !expense) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto space-y-4">
         <Link href="/dashboard/employee/expenses">
           <Button variant="ghost" className="gap-2">
-            <ChevronLeft className="w-4 h-4" />
-            Back to Expenses
+            <ChevronLeft className="w-4 h-4" /> Back to Expenses
           </Button>
         </Link>
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">Expense not found</p>
+        <div className="text-center py-12 text-muted-foreground">
+          <XCircle className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>Expense not found.</p>
         </div>
       </div>
     );
   }
 
+  const statusColor = STATUS_COLORS[expense.status] ?? STATUS_COLORS.DRAFT;
+
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
       <Link href="/dashboard/employee/expenses">
         <Button variant="ghost" className="gap-2">
-          <ChevronLeft className="w-4 h-4" />
-          Back to Expenses
+          <ChevronLeft className="w-4 h-4" /> Back to Expenses
         </Button>
       </Link>
 
@@ -46,43 +81,45 @@ export default function ExpenseDetailPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <CardTitle className="text-2xl">{expense.category}</CardTitle>
-                  <CardDescription>{expense.date.toLocaleDateString()}</CardDescription>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {new Date(expense.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </p>
                 </div>
-                <span
-                  className={`px-4 py-2 rounded-full text-sm font-medium ${
-                    expense.status === 'approved'
-                      ? 'bg-green-100 text-green-800'
-                      : expense.status === 'pending'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
-                </span>
+                <Badge className={`border text-sm px-3 py-1 ${statusColor}`}>
+                  {expense.status.charAt(0) + expense.status.slice(1).toLowerCase().replace('_', ' ')}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Amount</p>
                 <p className="text-3xl font-bold">
-                  ${expense.amount.toFixed(2)} {expense.currency}
+                  {expense.amount.toLocaleString()} <span className="text-lg font-medium text-muted-foreground">{expense.currency}</span>
                 </p>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Description</p>
-                <p className="text-foreground">{expense.description || 'No description provided'}</p>
-              </div>
+              {expense.description && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Description</p>
+                  <p className="text-foreground">{expense.description}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Receipt Preview */}
+          {/* Receipt */}
           {expense.receiptUrl && (
             <Card>
               <CardHeader>
-                <CardTitle>Receipt</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Receipt className="w-4 h-4" /> Receipt
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <img src={expense.receiptUrl} alt="Receipt" className="w-full rounded-lg" />
+                <img
+                  src={expense.receiptUrl}
+                  alt="Receipt"
+                  className="w-full rounded-lg border border-border max-h-96 object-contain"
+                />
               </CardContent>
             </Card>
           )}
@@ -90,61 +127,45 @@ export default function ExpenseDetailPage() {
           {/* Approval Timeline */}
           <Card>
             <CardHeader>
-              <CardTitle>Approval Timeline</CardTitle>
+              <CardTitle>Approval Progress</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {expense.approvals.length > 0 ? (
-                  expense.approvals.map((approval, idx) => (
-                    <div key={idx} className="flex gap-4">
-                      <div className="flex flex-col items-center">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
-                            approval.status === 'approved'
-                              ? 'bg-green-500'
-                              : approval.status === 'rejected'
-                              ? 'bg-red-500'
-                              : 'bg-gray-300'
-                          }`}
-                        >
-                          {approval.status === 'approved' ? (
-                            <CheckCircle className="w-4 h-4" />
-                          ) : approval.status === 'rejected' ? (
-                            <XCircle className="w-4 h-4" />
-                          ) : (
-                            <Clock className="w-4 h-4" />
-                          )}
-                        </div>
-                        {idx < expense.approvals.length - 1 && (
-                          <div className="w-0.5 h-12 bg-border my-1" />
-                        )}
-                      </div>
-                      <div className="flex-1 pt-1">
-                        <p className="font-medium">
-                          {approval.approverName} (Step {approval.step})
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {approval.status === 'approved'
-                            ? 'Approved'
-                            : approval.status === 'rejected'
-                            ? 'Rejected'
-                            : 'Pending'}
-                        </p>
-                        {approval.comment && (
-                          <p className="text-sm mt-2 p-2 bg-muted rounded">
-                            {approval.comment}
-                          </p>
-                        )}
-                        {approval.timestamp && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {approval.timestamp.toLocaleString()}
-                          </p>
-                        )}
-                      </div>
+                {expense.status === 'SUBMITTED' && (
+                  <div className="flex gap-3 items-center">
+                    <Clock className="w-5 h-5 text-amber-500 shrink-0" />
+                    <div>
+                      <p className="font-medium text-sm">Waiting for review</p>
+                      <p className="text-xs text-muted-foreground">Your manager will review this expense soon</p>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-muted-foreground text-sm">No approvals yet</p>
+                  </div>
+                )}
+                {expense.status === 'IN_REVIEW' && (
+                  <div className="flex gap-3 items-center">
+                    <Clock className="w-5 h-5 text-blue-500 shrink-0 animate-pulse" />
+                    <div>
+                      <p className="font-medium text-sm">Currently under review</p>
+                      <p className="text-xs text-muted-foreground">An approver is reviewing this expense</p>
+                    </div>
+                  </div>
+                )}
+                {expense.status === 'APPROVED' && (
+                  <div className="flex gap-3 items-center">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                    <div>
+                      <p className="font-medium text-sm">Expense Approved</p>
+                      <p className="text-xs text-muted-foreground">Your expense has been approved</p>
+                    </div>
+                  </div>
+                )}
+                {expense.status === 'REJECTED' && (
+                  <div className="flex gap-3 items-center">
+                    <XCircle className="w-5 h-5 text-red-500 shrink-0" />
+                    <div>
+                      <p className="font-medium text-sm">Expense Rejected</p>
+                      <p className="text-xs text-muted-foreground">This expense was not approved</p>
+                    </div>
+                  </div>
                 )}
               </div>
             </CardContent>
@@ -155,38 +176,30 @@ export default function ExpenseDetailPage() {
         <div>
           <Card className="sticky top-24">
             <CardHeader>
-              <CardTitle>Summary</CardTitle>
+              <CardTitle className="text-base">Summary</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Expense ID</p>
-                <p className="text-sm font-mono bg-muted p-2 rounded">{expense.id}</p>
+            <CardContent className="space-y-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Expense ID</p>
+                <p className="font-mono bg-muted p-1.5 rounded text-xs break-all mt-1">{expense.id}</p>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Category</p>
-                <p className="font-medium">{expense.category}</p>
+              <div>
+                <p className="text-muted-foreground">Category</p>
+                <p className="font-medium mt-0.5">{expense.category}</p>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Amount</p>
-                <p className="text-2xl font-bold">${expense.amount.toFixed(2)}</p>
+              <div>
+                <p className="text-muted-foreground">Amount</p>
+                <p className="text-xl font-bold mt-0.5">{expense.amount.toLocaleString()} {expense.currency}</p>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Submitted</p>
-                <p className="text-sm">{expense.createdAt.toLocaleDateString()}</p>
+              <div>
+                <p className="text-muted-foreground">Submitted</p>
+                <p className="mt-0.5">{new Date(expense.createdAt).toLocaleDateString()}</p>
               </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Status</p>
-                <p
-                  className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                    expense.status === 'approved'
-                      ? 'bg-green-100 text-green-800'
-                      : expense.status === 'pending'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-red-100 text-red-800'
-                  }`}
-                >
-                  {expense.status.toUpperCase()}
-                </p>
+              <div>
+                <p className="text-muted-foreground">Status</p>
+                <Badge className={`border text-xs mt-1 ${statusColor}`}>
+                  {expense.status.charAt(0) + expense.status.slice(1).toLowerCase().replace('_', ' ')}
+                </Badge>
               </div>
             </CardContent>
           </Card>

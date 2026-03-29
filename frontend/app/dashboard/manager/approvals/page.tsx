@@ -1,234 +1,210 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useApp } from '@/components/mock/state';
-import { mockUsers } from '@/components/mock/data';
-import { Checkbox } from '@/components/ui/checkbox';
-import { ChevronRight, LayoutGrid, List } from 'lucide-react';
-import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { ChevronRight, ClipboardCheck, Clock, XCircle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { api } from '@/lib/api';
+
+interface ApprovalItem {
+  id: string;
+  amount: number;
+  currency: string;
+  category: string;
+  description: string;
+  date: string;
+  status: string;
+  user?: { name: string; email: string };
+}
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
+  SUBMITTED: { label: 'Pending', color: 'bg-amber-500/10 text-amber-600 border-amber-200', icon: Clock },
+  IN_REVIEW: { label: 'In Review', color: 'bg-blue-500/10 text-blue-600 border-blue-200', icon: ClipboardCheck },
+  APPROVED: { label: 'Approved', color: 'bg-emerald-500/10 text-emerald-600 border-emerald-200', icon: CheckCircle2 },
+  REJECTED: { label: 'Rejected', color: 'bg-red-500/10 text-red-500 border-red-200', icon: XCircle },
+};
 
 export default function ManagerApprovalsPage() {
-  const { state, dispatch } = useApp();
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currency, setCurrency] = useState('USD');
 
-  // Get managed employees
-  const managedEmployees = mockUsers.filter(u => u.managerId === state.currentUserId);
-  const managedExpenses = state.expenses.filter(e =>
-    managedEmployees.some(emp => emp.id === e.employeeId)
-  );
+  const approverId = typeof window !== 'undefined' ? localStorage.getItem('currentUserId') ?? '' : '';
 
-  const pendingExpenses = managedExpenses.filter(e => e.status === 'pending');
-  const approvedExpenses = managedExpenses.filter(e => e.status === 'approved');
-  const rejectedExpenses = managedExpenses.filter(e => e.status === 'rejected');
+  useEffect(() => {
+    const c = localStorage.getItem('companyCurrency') ?? 'USD';
+    setCurrency(c);
+  }, []);
 
-  const handleSelectAll = () => {
-    if (selectedIds.length === pendingExpenses.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(pendingExpenses.map(e => e.id));
+  const fetchApprovals = useCallback(async () => {
+    if (!approverId) return;
+    setLoading(true);
+    try {
+      const data = await api.getPendingApprovals(approverId);
+      setApprovals(data);
+    } catch {
+      setApprovals([]);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [approverId]);
 
-  const handleToggleExpense = (id: string) => {
-    setSelectedIds(prev =>
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
-  };
+  useEffect(() => { fetchApprovals(); }, [fetchApprovals]);
 
-  const handleBulkApprove = async () => {
-    for (const id of selectedIds) {
-      dispatch({
-        type: 'APPROVE_EXPENSE',
-        payload: { expenseId: id, approverId: state.currentUserId },
-      });
-    }
-    setSelectedIds([]);
-    toast.success(`Approved ${selectedIds.length} expense(s)`);
-  };
-
-  const handleBulkReject = async () => {
-    for (const id of selectedIds) {
-      dispatch({
-        type: 'REJECT_EXPENSE',
-        payload: { expenseId: id, approverId: state.currentUserId, comment: 'Bulk rejected by manager' },
-      });
-    }
-    setSelectedIds([]);
-    toast.success(`Rejected ${selectedIds.length} expense(s)`);
-  };
+  const pending = approvals.filter((e) => e.status === 'SUBMITTED' || e.status === 'IN_REVIEW');
+  const approved = approvals.filter((e) => e.status === 'APPROVED');
+  const rejected = approvals.filter((e) => e.status === 'REJECTED');
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2">Team Approvals</h1>
-          <p className="text-muted-foreground">Review and approve team member expenses</p>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <ClipboardCheck className="w-6 h-6 text-primary" />
+            Team Approvals
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Review and action team expense requests · amounts shown in <strong>{currency}</strong>
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant={viewMode === 'list' ? 'default' : 'outline'}
-            onClick={() => setViewMode('list')}
-            className="gap-2"
-          >
-            <List className="w-4 h-4" />
-            List
-          </Button>
-          <Button
-            variant={viewMode === 'kanban' ? 'default' : 'outline'}
-            onClick={() => setViewMode('kanban')}
-            className="gap-2"
-          >
-            <LayoutGrid className="w-4 h-4" />
-            Kanban
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={fetchApprovals}>
+          <RefreshCw className="w-4 h-4 mr-1.5" /> Refresh
+        </Button>
       </div>
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-yellow-600">{pendingExpenses.length}</div>
-            <p className="text-sm text-muted-foreground">Pending Review</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-green-600">{approvedExpenses.length}</div>
-            <p className="text-sm text-muted-foreground">Approved</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-red-600">{rejectedExpenses.length}</div>
-            <p className="text-sm text-muted-foreground">Rejected</p>
-          </CardContent>
-        </Card>
+        {[
+          { label: 'Pending Review', value: pending.length, color: 'text-amber-600', icon: Clock },
+          { label: 'Approved', value: approved.length, color: 'text-emerald-600', icon: CheckCircle2 },
+          { label: 'Rejected', value: rejected.length, color: 'text-red-500', icon: XCircle },
+        ].map((s) => (
+          <Card key={s.label}>
+            <CardContent className="pt-5 flex items-center gap-3">
+              <s.icon className={`w-8 h-8 ${s.color} opacity-80`} />
+              <div>
+                <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                <p className="text-xs text-muted-foreground">{s.label}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Bulk Actions */}
-      {selectedIds.length > 0 && (
-        <Card className="border-primary bg-primary/5">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <p className="font-medium">{selectedIds.length} expenses selected</p>
-              <div className="flex gap-2">
-                <Button onClick={handleBulkApprove} size="sm">
-                  Approve All
-                </Button>
-                <Button onClick={handleBulkReject} variant="destructive" size="sm">
-                  Reject All
-                </Button>
-                <Button
-                  onClick={() => setSelectedIds([])}
-                  variant="outline"
-                  size="sm"
-                >
-                  Clear Selection
-                </Button>
-              </div>
+      {/* Pending List */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Pending Approvals</CardTitle>
+              <CardDescription>Expense requests waiting for your action</CardDescription>
             </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* List View */}
-      {viewMode === 'list' && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Pending Approvals</CardTitle>
-                <CardDescription>Expenses awaiting your review</CardDescription>
-              </div>
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  checked={selectedIds.length === pendingExpenses.length && pendingExpenses.length > 0}
-                  onCheckedChange={handleSelectAll}
-                />
-                <span className="text-sm">Select All</span>
-              </label>
+            {pending.length > 0 && (
+              <Badge className="bg-amber-500/10 text-amber-600 border-amber-200">
+                {pending.length} waiting
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center items-center py-12 gap-2 text-muted-foreground">
+              <RefreshCw className="w-4 h-4 animate-spin" /> Loading approvals...
             </div>
-          </CardHeader>
-          <CardContent>
-            {pendingExpenses.length > 0 ? (
-              <div className="space-y-2">
-                {pendingExpenses.map(expense => (
+          ) : pending.length === 0 ? (
+            <div className="text-center py-12">
+              <CheckCircle2 className="w-10 h-10 mx-auto mb-3 text-emerald-400 opacity-50" />
+              <p className="font-medium text-foreground">All caught up!</p>
+              <p className="text-sm text-muted-foreground mt-1">No pending approvals at the moment</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {pending.map((expense) => {
+                const cfg = STATUS_CONFIG[expense.status] ?? STATUS_CONFIG.SUBMITTED;
+                const Icon = cfg.icon;
+                return (
                   <Link
                     key={expense.id}
                     href={`/dashboard/manager/approvals/${expense.id}`}
+                    className="flex items-center gap-4 py-4 hover:bg-muted/30 px-2 rounded-lg -mx-2 transition-colors group"
                   >
-                    <div className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors group">
-                      <div className="flex items-center gap-3 flex-1">
-                        <Checkbox
-                          checked={selectedIds.includes(expense.id)}
-                          onCheckedChange={() => handleToggleExpense(expense.id)}
-                          onClick={e => e.stopPropagation()}
-                        />
-                        <div className="flex-1">
-                          <p className="font-medium">{expense.employeeName}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {expense.category} • {expense.date.toLocaleDateString()}
-                          </p>
-                          <p className="text-sm">{expense.description}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="font-bold">${expense.amount.toFixed(2)}</p>
-                          <p className="text-xs text-muted-foreground">{expense.currency}</p>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                      </div>
+                    {/* Avatar */}
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                      {expense.user?.name?.substring(0, 2).toUpperCase() ?? '??'}
                     </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{expense.user?.name ?? 'Unknown'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {expense.category} · {new Date(expense.date).toLocaleDateString()}
+                      </p>
+                      {expense.description && (
+                        <p className="text-xs text-muted-foreground truncate max-w-[300px] mt-0.5">
+                          {expense.description}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Amount */}
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-sm">
+                        {expense.amount.toLocaleString()} {expense.currency}
+                      </p>
+                    </div>
+
+                    {/* Status Badge */}
+                    <Badge className={`border text-xs shrink-0 ${cfg.color}`}>
+                      <Icon className="w-3 h-3 mr-1" />
+                      {cfg.label}
+                    </Badge>
+
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
                   </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">No pending approvals</p>
-              </div>
-            )}
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recently Processed */}
+      {(approved.length > 0 || rejected.length > 0) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Recently Processed</CardTitle>
+            <CardDescription>Expenses you have already actioned</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y">
+              {[...approved, ...rejected].slice(0, 10).map((expense) => {
+                const cfg = STATUS_CONFIG[expense.status] ?? STATUS_CONFIG.APPROVED;
+                const Icon = cfg.icon;
+                return (
+                  <div key={expense.id} className="flex items-center gap-4 py-3 opacity-70">
+                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold shrink-0">
+                      {expense.user?.name?.substring(0, 2).toUpperCase() ?? '??'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{expense.user?.name ?? 'Unknown'}</p>
+                      <p className="text-xs text-muted-foreground">{expense.category}</p>
+                    </div>
+                    <span className="text-sm font-semibold shrink-0">
+                      {expense.amount.toLocaleString()} {expense.currency}
+                    </span>
+                    <Badge className={`border text-xs shrink-0 ${cfg.color}`}>
+                      <Icon className="w-3 h-3 mr-1" />
+                      {cfg.label}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
-      )}
-
-      {/* Kanban View */}
-      {viewMode === 'kanban' && (
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-4">
-          {[
-            { title: 'Submitted', status: 'pending', expenses: pendingExpenses },
-            { title: 'Approved', status: 'approved', expenses: approvedExpenses },
-            { title: 'Rejected', status: 'rejected', expenses: rejectedExpenses },
-          ].map(column => (
-            <Card key={column.status}>
-              <CardHeader>
-                <CardTitle className="text-base">{column.title}</CardTitle>
-                <p className="text-2xl font-bold text-muted-foreground">{column.expenses.length}</p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {column.expenses.map(expense => (
-                    <Link
-                      key={expense.id}
-                      href={`/dashboard/manager/approvals/${expense.id}`}
-                    >
-                      <div className="p-3 border border-border rounded-lg bg-card hover:bg-muted/50 transition-colors cursor-pointer">
-                        <p className="font-medium text-sm">{expense.employeeName}</p>
-                        <p className="text-xs text-muted-foreground">{expense.category}</p>
-                        <p className="text-sm font-bold mt-2">${expense.amount.toFixed(2)}</p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
       )}
     </div>
   );

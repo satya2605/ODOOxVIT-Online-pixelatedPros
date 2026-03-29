@@ -1,24 +1,39 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useApp } from '@/components/mock/state';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Settings, Bell, Lock, Database } from 'lucide-react';
+import { api } from '@/lib/api';
 
 export default function SettingsPage() {
-  const { state } = useApp();
+  const [userCount, setUserCount] = useState(0);
+  const [expenseCount, setExpenseCount] = useState(0);
+  const [rulesCount, setRulesCount] = useState(0);
+  const currency = typeof window !== 'undefined' ? localStorage.getItem('companyCurrency') ?? 'USD' : 'USD';
+  const companyId = typeof window !== 'undefined' ? localStorage.getItem('companyId') ?? '' : '';
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const [users, expenses, rules] = await Promise.all([
+          api.getUsers(companyId),
+          api.getExpenses(),
+          api.getRules(),
+        ]);
+        setUserCount(users.length);
+        setExpenseCount(expenses.length);
+        setRulesCount(rules.length);
+      } catch {}
+    };
+    if (companyId) fetchStats();
+  }, [companyId]);
 
   const handleToggle = (setting: string) => {
     toast.success(`${setting} setting updated`);
-  };
-
-  const handleReset = () => {
-    if (confirm('Are you sure? This will reset all demo data.')) {
-      toast.success('Demo data has been reset');
-    }
   };
 
   return (
@@ -155,34 +170,25 @@ export default function SettingsPage() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-muted-foreground">Total Users</p>
-                <p className="font-bold">{state.users.length}</p>
+                <p className="font-bold">{userCount}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Total Expenses</p>
-                <p className="font-bold">{state.expenses.length}</p>
+                <p className="font-bold">{expenseCount}</p>
               </div>
               <div>
                 <p className="text-muted-foreground">Active Rules</p>
-                <p className="font-bold">{state.approvalRules.filter(r => r.enabled).length}</p>
+                <p className="font-bold">{rulesCount}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">Workflow Steps</p>
-                <p className="font-bold">{state.workflowSteps.length}</p>
+                <p className="text-muted-foreground">Base Currency</p>
+                <p className="font-bold">{currency}</p>
               </div>
             </div>
           </div>
 
           <div className="pt-4 border-t border-border space-y-2">
-            <Button variant="outline" className="w-full" onClick={() => toast.info('Data exported')}>
-              Export Data
-            </Button>
-            <Button
-              variant="destructive"
-              className="w-full"
-              onClick={handleReset}
-            >
-              Reset Demo Data
-            </Button>
+            <Button variant="outline" className="w-full" onClick={() => toast.info('Data export feature coming soon')}>Export Data</Button>
           </div>
         </CardContent>
       </Card>
@@ -203,7 +209,7 @@ export default function SettingsPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Mode</span>
-            <span className="font-medium">Demo (Simulated)</span>
+            <span className="font-medium">Production (Real Database)</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Last Updated</span>

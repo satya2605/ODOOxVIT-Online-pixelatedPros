@@ -4,10 +4,12 @@ import approvalsRoutes from '../modules/approvals/approvals.routes';
 import rulesRoutes from '../modules/rules/rules.routes';
 import usersRoutes from '../modules/users/users.routes';
 import ocrRoutes from '../modules/ocr/ocr.routes';
+import authRoutes from '../modules/auth/auth.routes';
 
 const router = Router();
 
 // Modular Route implementations mapping to frontend
+router.use('/auth', authRoutes);
 router.use('/expenses', expensesRoutes);
 router.use('/approvals', approvalsRoutes);
 router.use('/rules', rulesRoutes);
