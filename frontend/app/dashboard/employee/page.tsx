@@ -1,41 +1,69 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useApp } from '@/components/mock/state';
-import { mockUsers } from '@/components/mock/data';
-import { DollarSign, Clock, CheckCircle } from 'lucide-react';
+import { DollarSign, Clock, CheckCircle, Loader2 } from 'lucide-react';
 import { SmartStatusBadge } from '@/components/features/expenses/smart-status-badge';
+import api, { Expense } from '@/lib/api';
 
 export default function EmployeeDashboard() {
-  const { state } = useApp();
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const employeeExpenses = state.expenses.filter(e => e.employeeId === state.currentUserId);
-  const currentUser = mockUsers.find(u => u.id === state.currentUserId);
+  useEffect(() => {
+    const userId = localStorage.getItem('currentUserId');
+    setCurrentUserId(userId);
+
+    const fetchExpenses = async () => {
+      try {
+        const data = await api.getExpenses();
+        // Filter by user if needed (backend should ideally handle this)
+        const filtered = userId ? data.filter(e => e.userId === userId) : data;
+        setExpenses(filtered);
+      } catch (error) {
+        console.error('Failed to fetch expenses:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchExpenses();
+  }, []);
 
   const stats = {
-    totalSpent: employeeExpenses
-      .filter(e => e.status === 'approved')
+    totalSpent: expenses
+      .filter(e => e.status.toLowerCase() === 'approved')
       .reduce((sum, e) => sum + e.amount, 0),
-    pendingAmount: employeeExpenses
-      .filter(e => e.status === 'pending')
+    pendingAmount: expenses
+      .filter(e => e.status.toLowerCase() === 'submitted' || e.status.toLowerCase() === 'pending')
       .reduce((sum, e) => sum + e.amount, 0),
-    approvedCount: employeeExpenses.filter(e => e.status === 'approved').length,
+    approvedCount: expenses.filter(e => e.status.toLowerCase() === 'approved').length,
   };
 
-  const recentExpenses = employeeExpenses.slice(0, 5);
+  const recentExpenses = expenses.slice(0, 5);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="ml-2 text-muted-foreground">Loading dashboard data...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Welcome back, {currentUser?.name}</h1>
-        <p className="text-muted-foreground">Manage and track your expense reimbursements</p>
+        <h1 className="text-3xl font-bold tracking-tight mb-2">My Expenses</h1>
+        <p className="text-muted-foreground">Manage and track your expense reimbursements from the live system</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border-l-4 border-l-primary">
+        <Card className="border-l-4 border-l-primary shadow-sm bg-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <DollarSign className="w-4 h-4" />
@@ -48,7 +76,7 @@ export default function EmployeeDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-accent">
+        <Card className="border-l-4 border-l-orange-400 shadow-sm bg-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Clock className="w-4 h-4" />
@@ -58,12 +86,12 @@ export default function EmployeeDashboard() {
           <CardContent>
             <div className="text-2xl font-bold">${stats.pendingAmount.toFixed(2)}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {employeeExpenses.filter(e => e.status === 'pending').length} pending
+              {expenses.filter(e => e.status.toLowerCase() !== 'approved' && e.status.toLowerCase() !== 'rejected').length} items in workflow
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-green-500">
+        <Card className="border-l-4 border-l-green-500 shadow-sm bg-card">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <CheckCircle className="w-4 h-4" />
@@ -72,26 +100,26 @@ export default function EmployeeDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {employeeExpenses.length > 0
-                ? Math.round((stats.approvedCount / employeeExpenses.length) * 100)
+              {expenses.length > 0
+                ? Math.round((stats.approvedCount / expenses.length) * 100)
                 : 0}
               %
             </div>
-            <p className="text-xs text-muted-foreground mt-1">of submitted expenses</p>
+            <p className="text-xs text-muted-foreground mt-1">of total submissions</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Recent Expenses */}
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Recent Expenses</CardTitle>
-              <CardDescription>Your latest submitted expense reports</CardDescription>
+              <CardDescription>Directly from the Node.js backend</CardDescription>
             </div>
             <Link href="/dashboard/employee/submit">
-              <Button>Submit New Expense</Button>
+              <Button size="default">Submit New Expense</Button>
             </Link>
           </div>
         </CardHeader>
@@ -122,11 +150,13 @@ export default function EmployeeDashboard() {
                       className="border-b border-border hover:bg-muted/50 transition-colors cursor-pointer"
                       onClick={() => window.location.href = `/dashboard/employee/expenses/${expense.id}`}
                     >
-                      <td className="py-3 px-4 text-sm">{expense.date.toLocaleDateString()}</td>
+                      <td className="py-3 px-4 text-sm">{new Date(expense.date).toLocaleDateString()}</td>
                       <td className="py-3 px-4 text-sm">{expense.category}</td>
-                      <td className="py-3 px-4 text-sm font-medium">${expense.amount.toFixed(2)}</td>
+                      <td className="py-3 px-4 text-sm font-medium">
+                        {expense.currency} {expense.amount.toFixed(2)}
+                      </td>
                       <td className="py-3 px-4 text-sm">
-                        <SmartStatusBadge status={expense.status} />
+                        <SmartStatusBadge status={expense.status.toLowerCase() as any} />
                       </td>
                     </tr>
                   ))}
@@ -136,9 +166,9 @@ export default function EmployeeDashboard() {
           ) : (
             <div className="text-center py-12 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-lg bg-muted/20">
               <DollarSign className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
-              <p className="text-muted-foreground mb-4 font-medium">No expenses yet</p>
+              <p className="text-muted-foreground mb-4 font-medium">No system records found</p>
               <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-                Submit an expense report to get things started. Your reimbursements will appear here.
+                Connect your first expense report. The OCR engine will help you process the data instantly.
               </p>
               <Link href="/dashboard/employee/submit">
                 <Button>Submit Your First Expense</Button>

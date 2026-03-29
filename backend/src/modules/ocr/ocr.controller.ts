@@ -11,10 +11,8 @@ function parseReceiptText(text: string) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
   // --- AMOUNT EXTRACTION ---
-  // Try to find "TOTAL" line first (most reliable)
   let amount: number | null = null;
 
-  // Priority 1: Look for TOTAL, GRAND TOTAL, TOTAL AMOUNT, AMOUNT DUE, BALANCE DUE
   const totalPatterns = [
     /(?:GRAND\s*TOTAL|TOTAL\s*AMOUNT|TOTAL\s*DUE|AMOUNT\s*DUE|BALANCE\s*DUE|SUB\s*TOTAL|SUBTOTAL|TOTAL)[:\s]*\$?\s*([\d,]+\.?\d*)/i,
     /\$\s*([\d,]+\.\d{2})\s*(?:TOTAL|DUE)/i,
@@ -34,7 +32,6 @@ function parseReceiptText(text: string) {
     if (amount !== null) break;
   }
 
-  // Priority 2: If no TOTAL found, grab the largest dollar amount on the receipt
   if (amount === null) {
     const allAmounts: number[] = [];
     const dollarPattern = /\$\s*([\d,]+\.?\d*)/g;
@@ -50,24 +47,11 @@ function parseReceiptText(text: string) {
     }
   }
 
-  // Priority 3: Plain number patterns without $ sign
-  if (amount === null) {
-    const plainPattern = /(?:TOTAL|AMOUNT)[:\s]*([\d,]+\.?\d*)/i;
-    const plainMatch = text.match(plainPattern);
-    if (plainMatch) {
-      const parsed = parseFloat(plainMatch[1].replace(/,/g, ''));
-      if (!isNaN(parsed) && parsed > 0) amount = parsed;
-    }
-  }
-
   // --- DATE EXTRACTION ---
   let date: string | null = null;
   const datePatterns = [
-    // MM-DD-YYYY or MM/DD/YYYY
     /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/,
-    // YYYY-MM-DD
     /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/,
-    // DD Mon YYYY or Mon DD, YYYY
     /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[,.\s]+(\d{4})/i,
     /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})[,.\s]+(\d{4})/i,
   ];
@@ -75,7 +59,6 @@ function parseReceiptText(text: string) {
   for (const pattern of datePatterns) {
     const match = text.match(pattern);
     if (match) {
-      // Try to parse it into a normalized date string
       try {
         const rawDate = match[0];
         const parsed = new Date(rawDate);
@@ -84,14 +67,12 @@ function parseReceiptText(text: string) {
           break;
         }
       } catch {}
-      // Fallback: return the raw matched string
       date = match[0];
       break;
     }
   }
 
   // --- VENDOR / STORE NAME ---
-  // Usually the first non-empty, non-asterisk line
   let vendor: string | null = null;
   for (const line of lines) {
     const cleaned = line.replace(/[*\-=_#]/g, '').trim();
@@ -137,42 +118,34 @@ export const ocrController = {
         return res.status(400).json({ error: 'No receipt image provided' });
       }
 
-      // Strip the data URI prefix if present (e.g., "data:image/png;base64,")
+      // Strip the data URI prefix if present
       const base64Data = receiptBase64.replace(/^data:image\/\w+;base64,/, '');
       const imageBuffer = Buffer.from(base64Data, 'base64');
 
-      // Save temp file for Tesseract (it works better with file paths)
-      const tmpDir = path.join(__dirname, '..', '..', '..', 'tmp');
-      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-      const tmpFile = path.join(tmpDir, `receipt_${Date.now()}.png`);
-      fs.writeFileSync(tmpFile, imageBuffer);
+      // Permanent file storage in backend/public/uploads
+      const fileName = `receipt_${Date.now()}.png`;
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+      const filePath = path.join(uploadDir, fileName);
+      
+      fs.writeFileSync(filePath, imageBuffer);
 
-      console.log('[OCR] Processing receipt image...');
+      console.log(`[OCR] Saved receipt to ${filePath}. Processing...`);
 
-      // Run Tesseract OCR
-      const result = await Tesseract.recognize(tmpFile, 'eng', {
-        logger: (m: any) => {
-          if (m.status === 'recognizing text') {
-            console.log(`[OCR] Progress: ${Math.round(m.progress * 100)}%`);
-          }
-        },
-      });
+      // Run Tesseract OCR using the saved file
+      const result = await Tesseract.recognize(filePath, 'eng');
 
       const rawText = result.data.text;
-      console.log('[OCR] Raw text extracted:\n', rawText);
-
-      // Clean up temp file
-      fs.unlinkSync(tmpFile);
-
-      // Parse structured data from the raw text
       const parsed = parseReceiptText(rawText);
 
+      // Return real data + accessible static URL
       res.status(200).json({
         amount: parsed.amount,
         description: parsed.description,
         date: parsed.date,
         vendor: parsed.vendor,
         lineItems: parsed.lineItems,
+        receiptUrl: `/uploads/${fileName}`, // Assuming public folder is served statically
         rawText: parsed.rawText,
       });
     } catch (error: any) {
@@ -181,3 +154,4 @@ export const ocrController = {
     }
   },
 };
+

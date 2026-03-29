@@ -48,5 +48,25 @@ export const expenseController = {
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  },
+
+  getExpenseById: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const expense = await prisma.expense.findUnique({
+        where: { id },
+        include: { 
+          user: true, 
+          approvalSteps: {
+            include: { approver: true }
+          }
+        },
+      });
+      if (!expense) return res.status(404).json({ error: 'Expense not found' });
+      res.json(expense);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   }
 };
+

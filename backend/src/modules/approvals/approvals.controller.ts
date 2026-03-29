@@ -30,5 +30,18 @@ export const approvalController = {
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
+  },
+
+  getPendingApprovals: async (req: Request, res: Response) => {
+    try {
+      const { approverId } = req.query;
+      if (!approverId) return res.status(400).json({ error: 'Approver ID is required' });
+      
+      const result = await approvalService.getPendingApprovals(approverId as string);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   }
 };
+

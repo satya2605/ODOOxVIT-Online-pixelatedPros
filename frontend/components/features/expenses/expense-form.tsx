@@ -14,24 +14,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useApp } from '@/components/mock/state';
-import { Expense } from '@/components/mock/data';
 import { Loader2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
+import api from '@/lib/api';
 
 const categories = ['Travel', 'Meals', 'Supplies', 'Software', 'Training', 'Accommodation', 'Transportation'];
 
-interface ReceiptData {
-  amount?: number;
-  description?: string;
-}
-
 export function ExpenseForm() {
   const router = useRouter();
-  const { state, dispatch, submitExpense } = useApp();
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
-  const [receiptData, setReceiptData] = useState<ReceiptData>({});
 
   const [formData, setFormData] = useState({
     amount: '',
@@ -42,6 +34,7 @@ export function ExpenseForm() {
   });
 
   const [receipt, setReceipt] = useState<string | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -63,42 +56,24 @@ export function ExpenseForm() {
     }
   };
 
-  const simulateOCR = async () => {
+  const runOCR = async () => {
+    if (!receipt) return;
     setIsScanning(true);
     try {
-      // Call real backend OCR service
-      const response = await fetch('http://localhost:5000/api/ocr/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receiptBase64: receipt }),
-      });
-
-      if (!response.ok) throw new Error('OCR service failed');
-
-      const data = await response.json();
-
-      setReceiptData({ amount: data.amount, description: data.description });
+      const data = await api.scanReceipt(receipt);
+      
       setFormData(prev => ({
         ...prev,
         amount: data.amount?.toString() || prev.amount,
         description: data.description || prev.description,
         date: data.date || prev.date,
       }));
+      
+      setReceiptUrl(data.receiptUrl);
 
-      toast.success('Receipt scanned! Data populated from server.');
-    } catch (error) {
-      // Fallback to local mock if backend is unreachable
-      const fallbackData = {
-        amount: Math.round(Math.random() * 800 + 100) + 0.99,
-        description: 'Receipt scan - Business expense item',
-      };
-      setReceiptData(fallbackData);
-      setFormData(prev => ({
-        ...prev,
-        amount: fallbackData.amount.toString(),
-        description: fallbackData.description,
-      }));
-      toast.warning('Backend OCR unavailable — using local mock.');
+      toast.success('Receipt scanned successfully!');
+    } catch (error: any) {
+      toast.error('OCR failed: ' + error.message);
     } finally {
       setIsScanning(false);
     }
@@ -114,29 +89,18 @@ export function ExpenseForm() {
 
     setIsLoading(true);
 
-    const newExpense: Expense = {
-      id: `exp-${Date.now()}`,
-      employeeId: state.currentUserId,
-      employeeName: state.users.find(u => u.id === state.currentUserId)?.name || 'Employee',
-      amount: parseFloat(formData.amount),
-      currency: formData.currency,
-      category: formData.category,
-      date: new Date(formData.date),
-      description: formData.description,
-      receiptUrl: receipt || undefined,
-      status: 'pending',
-      approvals: [],
-      createdAt: new Date(),
-    };
-
     try {
-      await submitExpense(newExpense);
+      await api.createExpense({
+        ...formData,
+        amount: parseFloat(formData.amount),
+        receiptUrl: receiptUrl || undefined,
+        userId: 'temp-user-id', // TODO: Get from real Auth context later
+      });
+      
       toast.success('Expense submitted successfully!');
-      setTimeout(() => {
-        router.push('/dashboard/employee/expenses');
-      }, 1000);
-    } catch (error) {
-      toast.error('Failed to submit expense');
+      router.push('/dashboard/employee');
+    } catch (error: any) {
+      toast.error('Submission failed: ' + error.message);
     } finally {
       setIsLoading(false);
     }
@@ -161,7 +125,7 @@ export function ExpenseForm() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setReceipt(null)}
+                      onClick={() => { setReceipt(null); setReceiptUrl(null); }}
                     >
                       Clear
                     </Button>
@@ -174,7 +138,7 @@ export function ExpenseForm() {
                     >
                       <div className="p-4">
                         <p className="text-sm text-muted-foreground mb-2">
-                          Drag and drop your receipt here or click to upload
+                          Click to upload receipt image
                         </p>
                         <Input
                           id="receipt-upload"
@@ -192,7 +156,7 @@ export function ExpenseForm() {
               {receipt && (
                 <Button
                   type="button"
-                  onClick={simulateOCR}
+                  onClick={runOCR}
                   disabled={isScanning}
                   className="w-full"
                   variant="secondary"
@@ -200,12 +164,12 @@ export function ExpenseForm() {
                   {isScanning ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Scanning...
+                      Analyzing...
                     </>
                   ) : (
                     <>
                       <Wand2 className="w-4 h-4 mr-2" />
-                      Scan Receipt (OCR)
+                      Run Real OCR
                     </>
                   )}
                 </Button>
@@ -243,6 +207,7 @@ export function ExpenseForm() {
                         <SelectItem value="USD">USD</SelectItem>
                         <SelectItem value="EUR">EUR</SelectItem>
                         <SelectItem value="GBP">GBP</SelectItem>
+                        <SelectItem value="INR">INR</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

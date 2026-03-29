@@ -4,7 +4,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2, Plus, ArrowRight } from 'lucide-react';
 
-export function RuleBuilder() {
+export function RuleBuilder({ onSave }: { onSave?: (rule: any) => void }) {
+  const [name, setName] = useState('New Policy Rule');
   const [conditions, setConditions] = useState([
     { field: 'amount', operator: '>', value: '5000' }
   ]);
@@ -19,11 +20,33 @@ export function RuleBuilder() {
     setConditions(conditions.filter((_, i) => i !== index));
   };
 
+  const handleSave = () => {
+    if (onSave) {
+      // Transform to backend format
+      const rule = {
+        type: action.toUpperCase(),
+        priority: 1,
+        conditionJson: {
+          name,
+          conditions,
+          action,
+          approver,
+          enabled: true
+        }
+      };
+      onSave(rule);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
         <label className="text-sm font-medium">Rule Name</label>
-        <Input placeholder="e.g., Executive Travel Approval" defaultValue="Executive Travel Approval" />
+        <Input 
+          placeholder="e.g., Executive Travel Approval" 
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
       </div>
 
       <div className="space-y-3 bg-muted/50 p-4 rounded-lg border border-border">
@@ -122,13 +145,18 @@ export function RuleBuilder() {
       </div>
 
       {/* Visual Expression Preview */}
-      <div className="p-3 bg-slate-900 rounded-md border text-xs font-mono">
+      <div className="p-3 bg-slate-900 rounded-md border text-xs font-mono mb-4">
         <span className="text-slate-400">Rule Expression Preview:</span><br/>
         <span className="text-green-400 mt-1 block">
           IF ( {conditions.map(c => `${c.field} ${c.operator} ${c.value}`).join(' AND ')} )<br/>
           THEN {action} {action === 'require_approver' ? `(${approver.toUpperCase()})` : ''}
         </span>
       </div>
+
+      <Button onClick={handleSave} className="w-full">
+         Validate & Save Rule
+      </Button>
     </div>
   );
 }
+

@@ -5,5 +5,7 @@ const router = Router();
 
 router.post('/:expenseId/approve', approvalController.approveExpense);
 router.post('/:expenseId/reject', approvalController.rejectExpense);
+router.get('/pending', approvalController.getPendingApprovals);
+
 
 export default router;
